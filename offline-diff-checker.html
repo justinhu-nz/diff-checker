@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wire Copy Check</title>
+<style>
+:root{--bg:#f4f5f7;--panel:#fff;--text:#16181d;--muted:#666d78;--border:#d7dbe0;--soft:#eef0f3;
+--add-bg:#cdf3d6;--add-fg:#0d5a24;--del-bg:#fbd5d5;--del-fg:#9b1218;
+--warn-bg:#fff1c7;--warn-fg:#6b4b00;--ok-bg:#d6f2dd;--ok-fg:#0d5a24;--focus:#2563eb}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121418;--panel:#1b1e23;--text:#e7e9ec;--muted:#9aa2ad;--border:#2f343b;--soft:#23272d;
+--add-bg:#173d24;--add-fg:#94e3a9;--del-bg:#4b1c1f;--del-fg:#ffaeac;--warn-bg:#3d3112;--warn-fg:#f5d77a;--ok-bg:#163a22;--ok-fg:#94e3a9;--focus:#6ea0ff}}
+:root[data-theme="dark"]{--bg:#121418;--panel:#1b1e23;--text:#e7e9ec;--muted:#9aa2ad;--border:#2f343b;--soft:#23272d;
+--add-bg:#173d24;--add-fg:#94e3a9;--del-bg:#4b1c1f;--del-fg:#ffaeac;--warn-bg:#3d3112;--warn-fg:#f5d77a;--ok-bg:#163a22;--ok-fg:#94e3a9;--focus:#6ea0ff}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+button{font:inherit;color:inherit}
+kbd{font:11px ui-monospace,Menlo,monospace;border:1px solid var(--border);border-bottom-width:2px;border-radius:3px;padding:0 4px;background:var(--panel)}
+
+/* Top bar */
+.bar{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--border)}
+.bar h1{font-size:15px;margin:0;font-weight:700;white-space:nowrap}
+#status{font-weight:600;padding:3px 10px;border-radius:4px;background:var(--soft);color:var(--muted);white-space:nowrap}
+#status.warn{background:var(--warn-bg);color:var(--warn-fg)}
+#status.ok{background:var(--ok-bg);color:var(--ok-fg)}
+.spacer{flex:1}
+.b{border:1px solid var(--border);background:var(--panel);border-radius:4px;padding:3px 10px;cursor:pointer;white-space:nowrap}
+.b:hover{background:var(--soft)}
+.b.primary{border-color:var(--text);font-weight:600}
+.opts{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;padding:5px 12px;background:var(--soft);border-bottom:1px solid var(--border);font-size:13px}
+.opts>span{color:var(--muted)}
+.opts label{display:flex;gap:4px;align-items:center;cursor:pointer;white-space:nowrap}
+.opts select{font:inherit;padding:0 2px}
+
+/* Layout: inputs left, changes right; stacked (changes first) on narrow screens */
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:10px;padding:10px 12px;align-items:start}
+@media (max-width:900px){.wrap{grid-template-columns:1fr}.changes{order:-1}}
+.pane{background:var(--panel);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.ph{display:flex;align-items:center;gap:8px;padding:5px 8px 5px 10px;border-bottom:1px solid var(--border);font-weight:600;font-size:13px}
+.ph .meta{font-weight:400;color:var(--muted);margin-left:auto;font-size:12px}
+.ph .b{padding:1px 8px;font-size:12px;font-weight:400}
+.inputs{display:grid;gap:10px}
+textarea{display:block;width:100%;height:30vh;min-height:120px;border:0;resize:vertical;padding:8px 10px;background:transparent;color:var(--text);font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;outline:none}
+textarea:focus{box-shadow:inset 0 0 0 2px var(--focus)}
+
+/* Changes list */
+.changes{position:sticky;top:84px}
+#list{list-style:none;margin:0;padding:0;max-height:calc(100vh - 150px);overflow:auto}
+#list li{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:start;padding:7px 8px 7px 10px;border-bottom:1px solid var(--border);cursor:pointer}
+#list li:last-child{border-bottom:0}
+#list li.cur{box-shadow:inset 3px 0 0 var(--focus);background:var(--soft)}
+#list .n{color:var(--muted);font-size:12px;padding-top:2px;font-variant-numeric:tabular-nums}
+#list .s{line-height:1.55;word-break:break-word}
+#list li.ok .s{opacity:.4}
+#list .okb{border:1px solid var(--border);border-radius:4px;background:var(--panel);padding:1px 10px;cursor:pointer;font-size:13px;min-width:52px}
+#list li.ok .okb{background:var(--ok-bg);color:var(--ok-fg);border-color:transparent;font-weight:600}
+.tag{display:block;width:max-content;font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--muted);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin-bottom:2px}
+ins{background:var(--add-bg);color:var(--add-fg);text-decoration:none;border-radius:2px;padding:0 1px}
+del{background:var(--del-bg);color:var(--del-fg);border-radius:2px;padding:0 1px}
+#empty{margin:0;padding:14px 10px;color:var(--muted)}
+.keys{padding:5px 10px;border-top:1px solid var(--border);color:var(--muted);font-size:12px;display:flex;flex-wrap:wrap;gap:4px 12px}
+
+details.full{margin:0 12px 12px}
+details.full summary{cursor:pointer;color:var(--muted);font-size:13px;padding:4px 0}
+.stats{display:flex;gap:14px;padding:5px 10px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)}
+#out{margin:0;padding:10px;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word;max-height:60vh;overflow:auto}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <h1>Wire Copy Check</h1>
+  <span id="status">Paste source and edited copy</span>
+  <span class="spacer"></span>
+  <button class="b" id="allOk" title="Mark every change OK (A)">All OK</button>
+  <button class="b" id="swap" title="Swap source and edited copy">Swap</button>
+  <button class="b primary" id="clear" title="Clear both boxes and start a new check (Alt+N)">New check</button>
+</div>
+
+<div class="opts">
+  <span>Ignore:</span>
+  <label><input type="checkbox" id="ignoreMedia" checked> Video/image blocks</label>
+  <label><input type="checkbox" id="ignoreAbbr" checked> Abbreviation dots (U.S.=US)</label>
+  <label><input type="checkbox" id="ignorePunct" checked> Quote/dash style</label>
+  <label><input type="checkbox" id="ignoreWs" checked> Spacing &amp; line breaks</label>
+  <label><input type="checkbox" id="ignoreCase"> Capitals</label>
+  <span>Compare:</span>
+  <select id="mode"><option value="word">Words</option><option value="char">Characters</option></select>
+</div>
+
+<div class="wrap">
+  <div class="inputs">
+    <div class="pane">
+      <div class="ph">Source (wire)<button class="b" data-paste="a">Paste</button><span class="meta" id="wcA">0 words</span></div>
+      <textarea id="a" spellcheck="false" placeholder="Paste the original wire copy"></textarea>
+    </div>
+    <div class="pane">
+      <div class="ph">Edited (producer)<button class="b" data-paste="b">Paste</button><span class="meta" id="wcB">0 words</span></div>
+      <textarea id="b" spellcheck="false" placeholder="Paste the producer's version"></textarea>
+    </div>
+  </div>
+
+  <div class="pane changes">
+    <div class="ph">Changes to check<span class="meta" id="progress"></span></div>
+    <ol id="list"></ol>
+    <p id="empty">Changed sentences will be listed here.</p>
+    <div class="keys"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Space</kbd> OK</span><span><kbd>A</kbd> all OK</span><span><kbd>F</kbd> find in edited</span><span><kbd>Alt</kbd>+<kbd>N</kbd> new check</span></div>
+  </div>
+</div>
+
+<details class="full">
+  <summary>Full comparison</summary>
+  <div class="pane">
+    <div class="stats"><span>Unchanged: <b id="nCom">0</b></span><span>Added: <b id="nAdd">0</b></span><span>Removed: <b id="nDel">0</b></span></div>
+    <pre id="out"></pre>
+  </div>
+</details>
+
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const A=$('a'),B=$('b'),out=$('out'),list=$('list');
+const OPTS=['ignoreMedia','ignoreAbbr','ignorePunct','ignoreWs','ignoreCase'];
+const ABBR=/^\p{L}(?:\.\p{L})+$/u;
+
+// Remember option choices on this computer
+try{const s=JSON.parse(localStorage.getItem('wcc-opts')||'{}');OPTS.forEach(k=>{if(k in s)$(k).checked=s[k]});if(s.mode)$('mode').value=s.mode}catch(e){}
+function saveOpts(){try{const s={mode:$('mode').value};OPTS.forEach(k=>s[k]=$(k).checked);localStorage.setItem('wcc-opts',JSON.stringify(s))}catch(e){}}
+
+// Tokens: words, whitespace runs, single punctuation marks (or characters in character mode)
+function tokenize(s){
+  if($('mode').value==='char') return s.match(/\s+|[^\s]/gu)||[];
+  const t=s.match(/\p{L}(?:\.\p{L})+|[\p{L}\p{N}_]+|\s+|[^\p{L}\p{N}_\s]/gu)||[];
+  // Mid-sentence ("U.S. officials") an abbreviation keeps its final dot
+  const r=[];
+  for(let i=0;i<t.length;i++){
+    if(ABBR.test(t[i])&&t[i+1]==='.'&&/^[ \t]+$/.test(t[i+2]||'')&&/^[\p{Ll}\p{N}]/u.test(t[i+3]||'')){r.push(t[i]+'.');i++}
+    else r.push(t[i]);
+  }
+  return r;
+}
+
+// Myers O(ND) diff over token arrays
+function diff(a,b,eq){
+  const n=a.length,m=b.length,max=n+m,off=max+1;
+  const v=new Int32Array(2*max+3),trace=[];
+  outer:for(let d=0;d<=max;d++){
+    trace.push(v.slice());
+    for(let k=-d;k<=d;k+=2){
+      let x=(k===-d||(k!==d&&v[off+k-1]<v[off+k+1]))?v[off+k+1]:v[off+k-1]+1;
+      let y=x-k;
+      while(x<n&&y<m&&eq(a[x],b[y])){x++;y++}
+      v[off+k]=x;
+      if(x>=n&&y>=m)break outer;
+    }
+  }
+  const ops=[];let x=n,y=m;
+  for(let d=trace.length-1;d>=0;d--){
+    const vv=trace[d],k=x-y;
+    const pk=(k===-d||(k!==d&&vv[off+k-1]<vv[off+k+1]))?k+1:k-1;
+    const px=vv[off+pk],py=px-pk;
+    while(x>px&&y>py){x--;ops.push(['=',b[--y]])}
+    if(d>0){if(x===px)ops.push(['+',b[--y]]);else ops.push(['-',a[--x]])}
+  }
+  return ops.reverse();
+}
+
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]);
+const wrap=(op,s)=>op==='+'?'<ins>'+esc(s)+'</ins>':op==='-'?'<del>'+esc(s)+'</del>':esc(s);
+function render(ops){let h='',bo='',bt='';for(const [op,t] of ops){if(op!==bo){h+=wrap(bo,bt);bt='';bo=op}bt+=t}return h+wrap(bo,bt)}
+
+// Video/image embeds are removed from both texts before comparing, wherever they sit
+const MEDIA=/(?:^|\n|(?<=[.!?”"’)]\s))[ \t]*\S*(?:video|image)[ \t]*(?:\n|[ \t]+(?=\S))[\s\S]{0,400}?Remove[ \t]+(?:Video|Image)(?:\s+Add Captions)?(?:\s+Use Subrip \([^)\n]*\) files)?(?:\s+Upload Captions-file)?/gi;
+
+function run(){
+  const strip=s=>$('ignoreMedia').checked?s.replace(MEDIA,'\n'):s;
+  const sa=strip(A.value),sb=strip(B.value);
+  const iw=$('ignoreWs').checked,ip=$('ignorePunct').checked,ia=$('ignoreAbbr').checked,ic=$('ignoreCase').checked;
+  const norm=t=>{
+    if(iw&&/^\s+$/.test(t))return ' ';
+    if(ia&&/^\p{L}(?:\.\p{L})+\.?$/u.test(t))t=t.replace(/\./g,'');
+    if(ip)t=t.replace(/[‘’‚‛′`]/g,"'").replace(/[“”„‟″«»]/g,'"').replace(/[‐‑‒–—―−]/g,'-');
+    return ic?t.toLowerCase():t;
+  };
+  const ops=(sa||sb)?diff(tokenize(sa),tokenize(sb),(x,y)=>norm(x)===norm(y)):[];
+  let com=0,add=0,del=0;
+  for(const [op,t] of ops){if(!/\S/.test(t))continue;op==='='?com++:op==='+'?add++:del++}
+  out.innerHTML=render(ops);
+  $('nCom').textContent=com;$('nAdd').textContent=add;$('nDel').textContent=del;
+  summarize(ops);
+}
+
+// Split the diff into sentences and list only those that changed
+const okSet=new Set();let items=[],cur=-1;
+function summarize(ops){
+  const sents=[];let s=[],prevEnd=false,prevTok='';
+  const close=()=>{if(s.length)sents.push(s);s=[]};
+  for(const [op,t] of ops){
+    const ws=/^\s+$/.test(t);
+    if(ws&&(t.includes('\n')||prevEnd)){close();prevEnd=false;continue}
+    if(!ws){
+      prevEnd=/[.!?]["'”’)]*$/.test(t)&&op!=='-'&&!(t==='.'&&ABBR.test(prevTok));
+      if(op!=='-')prevTok=t;
+    }
+    s.push([op,t]);
+  }
+  close();
+  // Runs of short unpunctuated lines (embeds, labels, file names) are reviewed as one block
+  const text=(s,skip)=>s.filter(x=>x[0]!==skip).map(x=>x[1]).join('').trim();
+  const isFrag=s=>{const t=text(s);return t.length<=80&&!/[.!?]["'”’)]*$/.test(t)};
+  const same=(x,y)=>x!==''&&x.toLowerCase()===y.toLowerCase();
+  const repeats=(s,f)=>same(text(s,'+'),text(f,'+'))||same(text(s,'-'),text(f,'-'));
+  const ms=x=>/(video|image)$/i.test(x)&&!/^remove /i.test(x);
+  const groups=[];
+  for(const s of sents){
+    const last=groups[groups.length-1];
+    const start=ms(text(s,'+'))||ms(text(s,'-'));
+    if(isFrag(s)&&last&&last.block&&!repeats(s,last.lines[0])&&!start)last.lines.push(s);
+    else groups.push({block:isFrag(s),lines:[s]});
+  }
+  const changed=groups.filter(g=>g.lines.some(s=>s.some(([op,t])=>op!=='='&&/\S/.test(t))));
+  const prevKey=items[cur]&&items[cur].key;
+  list.innerHTML='';items=[];
+  changed.forEach((g,i)=>{
+    const block=g.block&&g.lines.length>1;
+    const html=(block?'<span class="tag">BLOCK</span>':'')+g.lines.map(render).join(block?'<br>':' ');
+    const key=html;
+    const li=document.createElement('li');
+    li.innerHTML='<span class="n">'+(i+1)+'</span><span class="s">'+html+'</span><button class="okb" tabindex="-1">OK</button>';
+    li.classList.toggle('ok',okSet.has(key));
+    const item={li,key,find:text(g.lines[0],'-')};
+    li.addEventListener('click',e=>{select(i);if(e.target.classList.contains('okb'))toggle(i)});
+    li.addEventListener('dblclick',()=>findInEdited(i));
+    items.push(item);list.appendChild(li);
+  });
+  const k=items.findIndex(it=>it.key===prevKey);
+  cur=k>=0?k:items.findIndex(it=>!okSet.has(it.key));
+  if(cur<0&&items.length)cur=0;
+  highlight();
+  $('empty').style.display=items.length?'none':'block';
+  $('empty').textContent=!(A.value.trim()&&B.value.trim())?'Changed sentences will be listed here.':'No changes found.';
+  update();
+}
+function highlight(){items.forEach((it,i)=>it.li.classList.toggle('cur',i===cur));if(items[cur])items[cur].li.scrollIntoView({block:'nearest'})}
+function select(i){if(i<0||i>=items.length)return;cur=i;highlight()}
+function toggle(i){
+  const it=items[i];if(!it)return;
+  okSet.has(it.key)?okSet.delete(it.key):okSet.add(it.key);
+  it.li.classList.toggle('ok',okSet.has(it.key));
+  // After ticking, jump to the next unchecked change
+  if(okSet.has(it.key)){const nxt=items.findIndex((x,j)=>j>i&&!okSet.has(x.key));if(nxt>=0)select(nxt)}
+  update();
+}
+function allOk(){items.forEach(it=>{okSet.add(it.key);it.li.classList.add('ok')});update()}
+function update(){
+  const n=items.length,ok=items.filter(it=>okSet.has(it.key)).length,st=$('status');
+  const ready=A.value.trim()&&B.value.trim();
+  $('progress').textContent=n?ok+' of '+n+' OK':'';
+  $('allOk').disabled=!n||ok===n;
+  if(!ready){st.className='';st.textContent=A.value.trim()?'Paste edited copy':B.value.trim()?'Paste source copy':'Paste source and edited copy'}
+  else if(!n){st.className='ok';st.textContent='✓ No changes'}
+  else if(ok===n){st.className='ok';st.textContent='✓ All '+n+' changes OK'}
+  else{st.className='warn';st.textContent=(n-ok)+' of '+n+' change'+(n>1?'s':'')+' to check'}
+}
+
+// Select the changed sentence in the edited box
+function findInEdited(i){
+  const it=items[i];if(!it||!it.find)return;
+  const words=it.find.split(/\s+/).slice(0,8).map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+  const m=new RegExp(words.join('\\s+')).exec(B.value);
+  if(!m)return;
+  B.focus();B.setSelectionRange(m.index,m.index+m[0].length);
+  // Scroll the box so the selection is visible
+  const before=B.value.slice(0,m.index).split('\n').length-1;
+  B.scrollTop=Math.max(0,before*19.5-B.clientHeight/3);
+}
+
+function words(s){const m=s.match(/\S+/g);return (m?m.length:0)+' words'}
+let timer;
+function schedule(){clearTimeout(timer);timer=setTimeout(run,150)}
+A.addEventListener('input',()=>{$('wcA').textContent=words(A.value);schedule()});
+B.addEventListener('input',()=>{$('wcB').textContent=words(B.value);schedule()});
+OPTS.forEach(k=>$(k).addEventListener('change',()=>{saveOpts();run()}));
+$('mode').addEventListener('change',()=>{saveOpts();run()});
+$('allOk').addEventListener('click',allOk);
+$('swap').addEventListener('click',()=>{[A.value,B.value]=[B.value,A.value];refresh()});
+function newCheck(){A.value=B.value='';okSet.clear();refresh();A.focus()}
+$('clear').addEventListener('click',newCheck);
+function refresh(){$('wcA').textContent=words(A.value);$('wcB').textContent=words(B.value);run()}
+document.querySelectorAll('[data-paste]').forEach(btn=>btn.addEventListener('click',async()=>{
+  const ta=$(btn.dataset.paste);
+  try{ta.value=await navigator.clipboard.readText();refresh()}
+  catch(e){ta.focus();ta.select();btn.textContent='Press ⌘V';setTimeout(()=>btn.textContent='Paste',2000)}
+}));
+
+// Keyboard review (when not typing in a box)
+document.addEventListener('keydown',e=>{
+  if(e.altKey&&(e.key==='n'||e.code==='KeyN')){e.preventDefault();newCheck();return}
+  const typing=/^(TEXTAREA|INPUT|SELECT)$/.test(document.activeElement.tagName);
+  if(e.key==='Escape'&&typing){document.activeElement.blur();return}
+  if(typing||e.metaKey||e.ctrlKey||e.altKey)return;
+  if(e.key==='ArrowDown'||e.key==='j'){e.preventDefault();select(Math.min(cur+1,items.length-1))}
+  else if(e.key==='ArrowUp'||e.key==='k'){e.preventDefault();select(Math.max(cur-1,0))}
+  else if(e.key===' '||e.key==='Enter'){e.preventDefault();toggle(cur)}
+  else if(e.key==='a'){allOk()}
+  else if(e.key==='f'){e.preventDefault();findInEdited(cur)}
+});
+
+run();
+})();
+</script>
+</body>
+</html>
